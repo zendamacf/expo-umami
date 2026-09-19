@@ -22,12 +22,17 @@ yarn test:coverage
 
 ## What's Tested
 
+### UmamiClient
+- ✅ identifyUser sends identify batch items and attaches distinct ID to events
+- ✅ clearUser removes distinct ID from subsequent events
+
 ### EventQueue
 - ✅ Queue creation with default settings
-- ✅ Event enqueueing
+- ✅ Event and identify batch item enqueueing
 - ✅ Auto-flush when batch size reached
 - ✅ Re-queueing on flush failure
 - ✅ Website ID injection
+- ✅ Mixed event/identify batch payloads
 
 ## Adding More Tests
 

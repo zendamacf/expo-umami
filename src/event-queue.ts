@@ -1,11 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { QueuedEvent, UmamiEvent, BatchResponse } from './types';
+import { BatchResponse, QueuedBatchItem, UmamiBatchItem } from './types';
 import { buildUserAgent } from './user-agent';
 
 const STORAGE_KEY = '@expo-umami/event-queue';
 
 export class EventQueue {
-  private queue: QueuedEvent[] = [];
+  private queue: QueuedBatchItem[] = [];
   private batchSize: number;
   private batchInterval: number;
   private persistEvents: boolean;
@@ -65,14 +65,34 @@ export class EventQueue {
     }
   }
 
-  async enqueue(payload: UmamiEvent): Promise<void> {
-    const event: QueuedEvent = {
-      payload: { ...payload, website: this.websiteId },
+  private withWebsiteId(item: UmamiBatchItem): UmamiBatchItem {
+    if (item.type === 'event') {
+      return {
+        type: 'event',
+        payload: {
+          ...item.payload,
+          website: this.websiteId,
+        },
+      };
+    }
+
+    return {
+      type: 'identify',
+      payload: {
+        ...item.payload,
+        website: this.websiteId,
+      },
+    };
+  }
+
+  async enqueue(item: UmamiBatchItem): Promise<void> {
+    const queuedItem: QueuedBatchItem = {
+      item: this.withWebsiteId(item),
       timestamp: Date.now(),
     };
 
-    this.queue.push(event);
-    this.log(`Event queued. Queue size: ${this.queue.length}`);
+    this.queue.push(queuedItem);
+    this.log(`Queued ${item.type}. Queue size: ${this.queue.length}`);
 
     if (this.persistEvents) {
       await this.persistQueue();
@@ -89,14 +109,13 @@ export class EventQueue {
     }
 
     this.isFlushing = true;
-    const eventsToSend = [...this.queue];
+    const itemsToSend = [...this.queue];
     this.queue = [];
 
-    this.log(`Flushing ${eventsToSend.length} events`);
+    this.log(`Flushing ${itemsToSend.length} items`);
 
     try {
-      const payloads = eventsToSend.map((e) => e.payload);
-      const response = await this.sendBatch(payloads);
+      const response = await this.sendBatch(itemsToSend.map((entry) => entry.item));
 
       this.log('Batch sent successfully:', response);
 
@@ -104,8 +123,8 @@ export class EventQueue {
         await this.persistQueue();
       }
     } catch (error) {
-      this.log('Error sending batch, re-queuing events:', error);
-      this.queue = [...eventsToSend, ...this.queue];
+      this.log('Error sending batch, re-queuing items:', error);
+      this.queue = [...itemsToSend, ...this.queue];
 
       if (this.persistEvents) {
         await this.persistQueue();
@@ -115,17 +134,10 @@ export class EventQueue {
     }
   }
 
-  private async sendBatch(events: UmamiEvent[]): Promise<BatchResponse> {
+  private async sendBatch(items: UmamiBatchItem[]): Promise<BatchResponse> {
     const url = `${this.hostUrl}/api/batch`;
 
-    // Wrap each event in the format expected by Umami's batch API
-    // Each event needs 'type' (always 'event' for tracking) and 'payload' with the event data
-    const batchPayload = events.map((event) => ({
-      type: 'event' as const,
-      payload: event,
-    }));
-
-    this.log(`Sending batch to ${url}`, batchPayload);
+    this.log(`Sending batch to ${url}`, items);
 
     const response = await fetch(url, {
       method: 'POST',
@@ -133,7 +145,7 @@ export class EventQueue {
         'Content-Type': 'application/json',
         'User-Agent': this.userAgent,
       },
-      body: JSON.stringify(batchPayload),
+      body: JSON.stringify(items),
     });
 
     if (!response.ok) {

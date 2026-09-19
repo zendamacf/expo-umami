@@ -255,6 +255,14 @@ Track an impression event. Automatically sets event name to 'impression'.
 
 Track a custom event with a specific event name.
 
+### `identifyUser(userId: string): Promise<void>`
+
+Associate subsequent events with a logged-in user. Sends an `identify` batch item to Umami and attaches the user ID to future event payloads.
+
+### `clearUser(): void`
+
+Clear the current user identity on logout so later events are anonymous again.
+
 ### `flush(): Promise<void>`
 
 Manually flush all queued events immediately.

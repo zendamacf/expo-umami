@@ -1,8 +1,8 @@
-import { AppState, AppStateStatus, Dimensions, Platform } from 'react-native';
+import { AppState, AppStateStatus, Dimensions } from 'react-native';
 import * as Application from 'expo-application';
 import * as Localization from 'expo-localization';
 import Constants from 'expo-constants';
-import { UmamiConfig, UmamiEvent, TrackEventOptions } from './types';
+import { UmamiConfig, UmamiEvent, UmamiIdentify, TrackEventOptions } from './types';
 import { EventQueue } from './event-queue';
 
 export class UmamiClient {
@@ -10,6 +10,7 @@ export class UmamiClient {
   private config: UmamiConfig | null = null;
   private eventQueue: EventQueue | null = null;
   private appStateSubscription: any = null;
+  private distinctId: string | null = null;
 
   private constructor() {}
 
@@ -82,26 +83,49 @@ export class UmamiClient {
       throw new Error('[expo-umami] Client not initialized. Call init() first.');
     }
 
-    // Ensure URL starts with /
     const normalizedUrl = url.startsWith('/') ? url : `/${url}`;
-
-    const { width, height } = Dimensions.get('window');
-    const locale = Localization.getLocales()[0]?.languageTag || 'en-US';
+    const context = this.getDeviceContext();
 
     const payload: UmamiEvent = {
-      hostname: Application.applicationId ?? 'unknown.app',
-      language: locale,
-      screen: `${Math.round(width)}x${Math.round(height)}`,
+      ...context,
       title: options.title || url,
       url: normalizedUrl,
       website: this.config.websiteId,
       ...(options.eventName ? { name: options.eventName } : {}),
+      ...(this.distinctId ? { id: this.distinctId } : {}),
       data: options.data || {},
     };
 
     this.log(`Tracking event: ${url}${options.eventName ? ` (${options.eventName})` : ''}`, payload);
 
-    await this.eventQueue.enqueue(payload);
+    await this.eventQueue.enqueue({ type: 'event', payload });
+  }
+
+  async identifyUser(userId: string): Promise<void> {
+    if (!this.config || !this.eventQueue) {
+      throw new Error('[expo-umami] Client not initialized. Call init() first.');
+    }
+
+    const trimmedUserId = userId.trim();
+    if (!trimmedUserId) {
+      return;
+    }
+
+    this.distinctId = trimmedUserId;
+
+    const payload: UmamiIdentify = {
+      ...this.getDeviceContext(),
+      website: this.config.websiteId,
+      id: trimmedUserId,
+    };
+
+    this.log('Identifying user', { id: trimmedUserId });
+
+    await this.eventQueue.enqueue({ type: 'identify', payload });
+  }
+
+  clearUser(): void {
+    this.distinctId = null;
   }
 
   async flush(): Promise<void> {
@@ -121,6 +145,7 @@ export class UmamiClient {
       this.appStateSubscription = null;
     }
 
+    this.distinctId = null;
     this.config = null;
     UmamiClient.instance = null;
   }
@@ -131,6 +156,21 @@ export class UmamiClient {
 
   getQueueSize(): number {
     return this.eventQueue?.getQueueSize() || 0;
+  }
+
+  getDistinctId(): string | null {
+    return this.distinctId;
+  }
+
+  private getDeviceContext(): Pick<UmamiEvent, 'hostname' | 'language' | 'screen'> {
+    const { width, height } = Dimensions.get('window');
+    const locale = Localization.getLocales()[0]?.languageTag || 'en-US';
+
+    return {
+      hostname: Application.applicationId ?? 'unknown.app',
+      language: locale,
+      screen: `${Math.round(width)}x${Math.round(height)}`,
+    };
   }
 
   private log(...args: any[]): void {

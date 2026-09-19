@@ -1,11 +1,39 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventQueue } from '../event-queue';
-import type { UmamiEvent } from '../types';
+import type { UmamiBatchItem, UmamiEvent, UmamiIdentify } from '../types';
 
 describe('EventQueue', () => {
   let queue: EventQueue;
   const mockHostUrl = 'https://analytics.test.com';
   const mockWebsiteId = 'test-website-id';
+
+  const eventPayload: UmamiEvent = {
+    hostname: 'com.test.app',
+    language: 'en-US',
+    screen: '390x844',
+    title: 'Home',
+    url: '/home',
+    website: mockWebsiteId,
+    data: {},
+  };
+
+  const identifyPayload: UmamiIdentify = {
+    website: mockWebsiteId,
+    hostname: 'com.test.app',
+    language: 'en-US',
+    screen: '390x844',
+    id: 'user-123',
+  };
+
+  const eventItem: UmamiBatchItem = {
+    type: 'event',
+    payload: eventPayload,
+  };
+
+  const identifyItem: UmamiBatchItem = {
+    type: 'identify',
+    payload: identifyPayload,
+  };
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -24,21 +52,11 @@ describe('EventQueue', () => {
     expect(queue.getQueueSize()).toBe(0);
   });
 
-  it('should enqueue an event', async () => {
+  it('should enqueue an event batch item', async () => {
     queue = new EventQueue(mockHostUrl, mockWebsiteId);
     await queue.init();
 
-    const event: UmamiEvent = {
-      hostname: 'com.test.app',
-      language: 'en-US',
-      screen: '390x844',
-      title: 'Home',
-      url: '/home',
-      website: mockWebsiteId,
-      data: {},
-    };
-
-    await queue.enqueue(event);
+    await queue.enqueue(eventItem);
     expect(queue.getQueueSize()).toBe(1);
   });
 
@@ -52,22 +70,10 @@ describe('EventQueue', () => {
       json: async () => ({ size: 3, processed: 3, errors: 0 }),
     });
 
-    const event: UmamiEvent = {
-      hostname: 'com.test.app',
-      language: 'en-US',
-      screen: '390x844',
-      title: 'Test',
-      url: '/test',
-      website: mockWebsiteId,
-      data: {},
-    };
+    await queue.enqueue(eventItem);
+    await queue.enqueue(eventItem);
+    await queue.enqueue(eventItem);
 
-    // Enqueue 3 events
-    await queue.enqueue(event);
-    await queue.enqueue(event);
-    await queue.enqueue(event);
-
-    // Wait for flush
     await new Promise((resolve) => setTimeout(resolve, 100));
 
     expect(global.fetch).toHaveBeenCalledWith(
@@ -82,101 +88,126 @@ describe('EventQueue', () => {
     );
   });
 
-  it('should re-queue events on flush failure', async () => {
+  it('should re-queue items on flush failure', async () => {
     queue = new EventQueue(mockHostUrl, mockWebsiteId, 1);
     await queue.init();
 
     (global.fetch as any).mockRejectedValue(new Error('Network error'));
 
-    const event: UmamiEvent = {
-      hostname: 'com.test.app',
-      language: 'en-US',
-      screen: '390x844',
-      title: 'Test',
-      url: '/test',
-      website: mockWebsiteId,
-      data: {},
-    };
+    await queue.enqueue(eventItem);
 
-    await queue.enqueue(event);
-
-    // Wait for flush attempt
     await new Promise((resolve) => setTimeout(resolve, 100));
 
-    // Event should be back in queue after failed flush
     expect(queue.getQueueSize()).toBe(1);
   });
 
-  it('should add website ID to events', async () => {
+  it('should add website ID to event payloads', async () => {
     queue = new EventQueue(mockHostUrl, mockWebsiteId, 10);
     await queue.init();
-
-    const event: UmamiEvent = {
-      hostname: 'com.test.app',
-      language: 'en-US',
-      screen: '390x844',
-      title: 'Test',
-      url: '/test',
-      website: '',
-      data: {},
-    };
 
     (global.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ size: 1, processed: 1, errors: 0 }),
     });
 
-    await queue.enqueue(event);
+    await queue.enqueue({
+      type: 'event',
+      payload: { ...eventPayload, website: '' },
+    });
     await queue.flush();
 
     const fetchCall = (global.fetch as any).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
 
-    // Verify batch format: array of {type, payload} objects
     expect(Array.isArray(body)).toBe(true);
-    expect(body[0]).toHaveProperty('type', 'event');
-    expect(body[0]).toHaveProperty('payload');
-    expect(body[0].payload.website).toBe(mockWebsiteId);
+    expect(body[0]).toEqual({
+      type: 'event',
+      payload: expect.objectContaining({
+        website: mockWebsiteId,
+      }),
+    });
   });
 
   it('should send events in correct batch format', async () => {
     queue = new EventQueue(mockHostUrl, mockWebsiteId, 10);
     await queue.init();
 
-    const event: UmamiEvent = {
-      hostname: 'com.test.app',
-      language: 'en-US',
-      screen: '390x844',
-      title: 'Test',
-      url: '/test',
-      website: mockWebsiteId,
-      data: { custom: 'value' },
-    };
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ size: 1, processed: 1, errors: 0 }),
+    });
+
+    await queue.enqueue({
+      type: 'event',
+      payload: { ...eventPayload, data: { custom: 'value' } },
+    });
+    await queue.flush();
+
+    const fetchCall = (global.fetch as any).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+
+    expect(body).toEqual([
+      {
+        type: 'event',
+        payload: expect.objectContaining({
+          ...eventPayload,
+          data: { custom: 'value' },
+        }),
+      },
+    ]);
+  });
+
+  it('should send identify in correct batch format', async () => {
+    queue = new EventQueue(mockHostUrl, mockWebsiteId, 10);
+    await queue.init();
 
     (global.fetch as any).mockResolvedValue({
       ok: true,
       json: async () => ({ size: 1, processed: 1, errors: 0 }),
     });
 
-    await queue.enqueue(event);
+    await queue.enqueue(identifyItem);
     await queue.flush();
 
     const fetchCall = (global.fetch as any).mock.calls[0];
     const body = JSON.parse(fetchCall[1].body);
 
-    // Verify correct Umami batch API format
     expect(body).toEqual([
       {
-        type: 'event',
+        type: 'identify',
         payload: expect.objectContaining({
-          hostname: 'com.test.app',
-          language: 'en-US',
-          screen: '390x844',
-          title: 'Test',
-          url: '/test',
+          ...identifyPayload,
           website: mockWebsiteId,
-          data: { custom: 'value' },
+          id: 'user-123',
         }),
+      },
+    ]);
+  });
+
+  it('should send mixed event and identify items in one batch', async () => {
+    queue = new EventQueue(mockHostUrl, mockWebsiteId, 10);
+    await queue.init();
+
+    (global.fetch as any).mockResolvedValue({
+      ok: true,
+      json: async () => ({ size: 2, processed: 2, errors: 0 }),
+    });
+
+    await queue.enqueue(identifyItem);
+    await queue.enqueue(eventItem);
+    await queue.flush();
+
+    const fetchCall = (global.fetch as any).mock.calls[0];
+    const body = JSON.parse(fetchCall[1].body);
+
+    expect(body).toEqual([
+      {
+        type: 'identify',
+        payload: expect.objectContaining({ id: 'user-123' }),
+      },
+      {
+        type: 'event',
+        payload: expect.objectContaining({ url: '/home' }),
       },
     ]);
   });
