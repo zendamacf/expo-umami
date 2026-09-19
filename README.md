@@ -71,6 +71,7 @@ useEffect(() => {
     batchInterval: 30000, // Or every 30 seconds (default: 30000)
     persistEvents: true,  // Save to AsyncStorage for offline (default: false)
     debug: true,          // Enable debug logging (default: false)
+    disabled: __DEV__,    // Skip analytics in development (default: false)
   });
 }, []);
 ```
@@ -195,6 +196,7 @@ console.log('Queued events:', getQueueSize());
 |--------|------|---------|-------------|
 | `websiteId` | string | **required** | Your Umami website ID |
 | `hostUrl` | string | **required** | Your Umami instance URL |
+| `disabled` | boolean | `false` | When `true`, no events are queued or sent (e.g. `disabled: __DEV__` in development) |
 | `batchSize` | number | `10` | Number of events before auto-flush |
 | `batchInterval` | number | `30000` | Milliseconds between auto-flushes |
 | `persistEvents` | boolean | `false` | Save events to AsyncStorage for offline |

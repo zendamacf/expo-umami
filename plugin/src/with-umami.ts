@@ -3,6 +3,7 @@ import { ConfigPlugin, createRunOncePlugin } from '@expo/config-plugins';
 export interface UmamiPluginProps {
   websiteId: string;
   hostUrl: string;
+  disabled?: boolean;
   batchSize?: number;
   batchInterval?: number;
   persistEvents?: boolean;
@@ -29,6 +30,7 @@ const withUmami: ConfigPlugin<UmamiPluginProps> = (config, props) => {
   config.extra.umami = {
     websiteId: props.websiteId,
     hostUrl: props.hostUrl,
+    disabled: props.disabled ?? false,
     batchSize: props.batchSize || 10,
     batchInterval: props.batchInterval || 30000,
     persistEvents: props.persistEvents ?? false,

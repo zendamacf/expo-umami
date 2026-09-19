@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+- `disabled` config option to skip all event queueing and network requests (useful for development builds)
+
 ## [0.1.0] - 2024-12-07
 
 ### Added

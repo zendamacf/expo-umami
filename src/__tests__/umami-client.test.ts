@@ -271,6 +271,32 @@ describe('UmamiClient', () => {
     });
   });
 
+  describe('disabled mode', () => {
+    it('should initialize without creating a queue when disabled', async () => {
+      await client.init({ ...mockConfig, disabled: true });
+
+      expect(client.isInitialized()).toBe(true);
+      expect(client.getQueueSize()).toBe(0);
+    });
+
+    it('should not send events when disabled', async () => {
+      await client.init({ ...mockConfig, disabled: true });
+
+      await client.trackEvent('/home');
+      await client.trackEvent('/about', { eventName: 'click' });
+      await client.flush();
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(client.getQueueSize()).toBe(0);
+    });
+
+    it('should no-op trackEvent without throwing when disabled', async () => {
+      await client.init({ ...mockConfig, disabled: true });
+
+      await expect(client.trackEvent('/home')).resolves.toBeUndefined();
+    });
+  });
+
   describe('queue management', () => {
     beforeEach(async () => {
       await client.init(mockConfig);

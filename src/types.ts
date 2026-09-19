@@ -1,6 +1,8 @@
 export interface UmamiConfig {
   websiteId: string;
   hostUrl: string;
+  /** When true, no events are queued or sent. Useful for development builds. */
+  disabled?: boolean;
   batchSize?: number;
   batchInterval?: number;
   persistEvents?: boolean;

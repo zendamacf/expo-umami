@@ -45,8 +45,14 @@ export class UmamiClient {
       batchInterval: 30000,
       persistEvents: false,
       debug: false,
+      disabled: false,
       ...finalConfig,
     };
+
+    if (this.config.disabled) {
+      this.log('[expo-umami] Umami client initialized (disabled)');
+      return;
+    }
 
     this.eventQueue = new EventQueue(
       this.config.hostUrl,
@@ -61,6 +67,10 @@ export class UmamiClient {
     this.setupAppStateListener();
 
     this.log('Umami client initialized', this.config);
+  }
+
+  private isDisabled(): boolean {
+    return this.config?.disabled === true;
   }
 
   private setupAppStateListener(): void {
@@ -78,7 +88,15 @@ export class UmamiClient {
   }
 
   async trackEvent(url: string, options: TrackEventOptions = {}): Promise<void> {
-    if (!this.config || !this.eventQueue) {
+    if (!this.config) {
+      throw new Error('[expo-umami] Client not initialized. Call init() first.');
+    }
+
+    if (this.isDisabled()) {
+      return;
+    }
+
+    if (!this.eventQueue) {
       throw new Error('[expo-umami] Client not initialized. Call init() first.');
     }
 
