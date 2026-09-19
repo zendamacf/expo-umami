@@ -5,6 +5,12 @@
   "main": "build/src/index.js",
   "types": "build/src/index.d.ts",
   "app": "build/plugin/src/index.js",
+  "files": [
+    "build",
+    "app.plugin.js",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "watch": "tsc --watch",
