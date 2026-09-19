@@ -297,6 +297,92 @@ describe('UmamiClient', () => {
     });
   });
 
+  describe('user identification', () => {
+    beforeEach(async () => {
+      await client.init(mockConfig);
+    });
+
+    it('should enqueue an identify batch item', async () => {
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({ size: 1, processed: 1, errors: 0 }),
+      });
+
+      await client.identifyUser('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa');
+      await client.flush();
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(fetchCall[1].body);
+
+      expect(body[0]).toEqual({
+        type: 'identify',
+        payload: expect.objectContaining({
+          website: mockConfig.websiteId,
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        }),
+      });
+    });
+
+    it('should attach distinct id to subsequent events', async () => {
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({ size: 2, processed: 2, errors: 0 }),
+      });
+
+      await client.identifyUser('user-123');
+      await client.trackEvent('/settings');
+      await client.flush();
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(fetchCall[1].body);
+
+      expect(body[0].type).toBe('identify');
+      expect(body[1]).toEqual({
+        type: 'event',
+        payload: expect.objectContaining({
+          url: '/settings',
+          id: 'user-123',
+        }),
+      });
+    });
+
+    it('should clear distinct id on logout', async () => {
+      (global.fetch as any).mockResolvedValue({
+        ok: true,
+        json: async () => ({ size: 1, processed: 1, errors: 0 }),
+      });
+
+      await client.identifyUser('user-123');
+      await client.flush();
+      (global.fetch as any).mockClear();
+
+      client.clearUser();
+
+      await client.trackEvent('/cards');
+      await client.flush();
+
+      const fetchCall = (global.fetch as any).mock.calls[0];
+      const body = JSON.parse(fetchCall[1].body);
+
+      expect(body[0].payload.id).toBeUndefined();
+    });
+
+    it('should ignore empty user ids', async () => {
+      await client.identifyUser('   ');
+
+      expect(client.getDistinctId()).toBeNull();
+      expect(client.getQueueSize()).toBe(0);
+    });
+
+    it('should throw when identifying before initialization', async () => {
+      client.destroy();
+
+      await expect(client.identifyUser('user-123')).rejects.toThrow(
+        '[expo-umami] Client not initialized. Call init() first.'
+      );
+    });
+  });
+
   describe('queue management', () => {
     beforeEach(async () => {
       await client.init(mockConfig);

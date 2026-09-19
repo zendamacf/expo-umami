@@ -16,9 +16,30 @@ export interface UmamiEvent {
   title: string;
   url: string;
   website: string;
-  name?: string;  // Maps to eventName in options, 'name' is required by Umami API
+  name?: string; // Maps to eventName in options, 'name' is required by Umami API
+  id?: string;
   data?: Record<string, any>;
 }
+
+export interface UmamiIdentify {
+  website: string;
+  hostname: string;
+  language: string;
+  screen: string;
+  id: string;
+}
+
+// Format expected by Umami's batch API
+// Each event needs 'type' (always 'event' for tracking) and 'payload' with the event data
+export type UmamiBatchItem =
+  | {
+      type: 'event';
+      payload: UmamiEvent;
+    }
+  | {
+      type: 'identify';
+      payload: UmamiIdentify;
+    };
 
 export interface TrackEventOptions {
   title?: string;
@@ -28,8 +49,8 @@ export interface TrackEventOptions {
 
 export type EventType = 'pageview' | 'event' | 'impression' | 'click';
 
-export interface QueuedEvent {
-  payload: UmamiEvent;
+export interface QueuedBatchItem {
+  item: UmamiBatchItem;
   timestamp: number;
 }
 

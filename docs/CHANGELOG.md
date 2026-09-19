@@ -4,6 +4,10 @@
 
 ### Added
 - `disabled` config option to skip all event queueing and network requests (useful for development builds)
+- `identifyUser(userId)` and `clearUser()` for logged-in user tracking via Umami distinct IDs
+
+### Changed
+- Event queue now stores typed batch items (`event` and `identify`) for Umami's `/api/batch` API
 
 ## [0.1.0] - 2024-12-07
 

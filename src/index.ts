@@ -65,3 +65,14 @@ export async function trackCustomEvent(
     eventName: eventName,
   });
 }
+
+// User identification
+
+export async function identifyUser(userId: string): Promise<void> {
+  const client = UmamiClient.getInstance();
+  await client.identifyUser(userId);
+}
+
+export function clearUser(): void {
+  UmamiClient.getInstance().clearUser();
+}
